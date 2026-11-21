@@ -1,5 +1,6 @@
 import http from 'node:http';
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
@@ -110,10 +111,22 @@ async function handleCommand(msg) {
         const cwd = args.workingDir || DEFAULT_CWD;
         let s;
         if (cmd === 'new_session') {
-          // Without an explicit system prompt jcode reuses the last session
-          // for the same cwd. An empty prompt forces a brand-new empty session
-          // while leaving the agent's default system prompt intact.
-          s = await client.createSession({ workingDir: cwd, systemPrompt: '' });
+          // jcode reuses the current session when the requested working_dir and
+          // system prompt match it. A unique symlink to the real cwd forces a
+          // genuinely new session without touching the agent's prompt or files.
+          const linkDir = '/root/.jcode-workspaces';
+          fs.mkdirSync(linkDir, { recursive: true });
+          const link = `${linkDir}/${randomUUID()}`;
+          try { fs.symlinkSync(cwd, link); } catch { /* already exists (uuid collision) */ }
+          // The long-lived bridge client keeps an "active session": calling
+          // createSession on it mutates that session instead of making a new
+          // one. A short-lived fresh client always creates a real new session.
+          const fresh = await JcodeClient.connect({ clientName: `jcode-web-new/${randomUUID()}` });
+          try {
+            s = await fresh.createSession({ workingDir: link });
+          } finally {
+            await fresh.close();
+          }
         } else {
           s = await client.createSession(cwd);
         }

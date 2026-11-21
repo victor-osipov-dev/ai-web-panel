@@ -221,6 +221,7 @@ export default function App() {
       activeRef.current = id;
       setActiveId(id);
       setMenuOpen(false);
+      setNotice('');
       setDraft(emptyDraft());
       setHistory([]);
       setPermission(null);
@@ -229,9 +230,14 @@ export default function App() {
         await call('attach', { sessionId: id });
         const h = await call('history', { sessionId: id });
         setHistory(Array.isArray(h) ? h : h?.messages || []);
-        const m = await call('models', { sessionId: id });
-        setModels(Array.isArray(m?.models) ? m.models : []);
-        setCurrentModel(m?.current || '');
+        try {
+          const m = await call('models', { sessionId: id });
+          setModels(Array.isArray(m?.models) ? m.models : []);
+          setCurrentModel(m?.current || '');
+        } catch {
+          // The daemon may be rebuilding its model catalog; keep the previous
+          // list instead of showing a transient error on every switch.
+        }
       } catch (e) {
         setNotice(String(e.message || e));
       }
@@ -363,6 +369,12 @@ export default function App() {
     if (!el || !stickRef.current) return;
     el.scrollTop = el.scrollHeight;
   }, [history, draft]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(''), 6000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   useEffect(() => {
     const el = taRef.current;
