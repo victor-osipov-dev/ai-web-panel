@@ -86,8 +86,26 @@ async function handleCommand(msg) {
       case 'list_sessions':
         result = await client.listSessions({ includeArchived: false });
         break;
-      case 'create_session': {
-        const s = await client.createSession(args.workingDir || DEFAULT_CWD);
+      case 'create_session':
+      case 'new_session': {
+        const cwd = args.workingDir || DEFAULT_CWD;
+        let s;
+        if (cmd === 'new_session') {
+          // jcode's create_session reuses the last session for the same cwd.
+          // Fork + clear gives a genuinely fresh, empty session instead.
+          const list = await client.listSessions();
+          const source = list.find((x) => x.working_dir === cwd) || list[0];
+          if (source) {
+            await client.attachSession(source.session_id);
+            const forked = await client.forkSession(source.session_id);
+            const id = forked.session_id || forked.session?.session_id;
+            // The fork copies its parent's history; the client clears it right
+            // after attaching (see App.jsx) to avoid "session busy" races here.
+            await client.attachSession(id);
+            s = forked.session || forked;
+          }
+        }
+        if (!s) s = await client.createSession(cwd);
         watchSession(s.session_id);
         result = s;
         broadcast({ type: 'sessions', sessions: await client.listSessions() });

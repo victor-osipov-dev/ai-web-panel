@@ -2,6 +2,80 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 const emptyDraft = () => ({ text: '', reasoning: '', tools: [], usage: null });
 
+function ModelSelect({ models, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = (models || []).filter(
+    (m) => !q || String(m.id || '').toLowerCase().includes(q) || String(m.provider || '').toLowerCase().includes(q),
+  );
+  const groups = filtered.reduce((acc, m) => {
+    const key = m.provider || 'jcode';
+    (acc[key] ||= []).push(m);
+    return acc;
+  }, {});
+
+  return (
+    <div className="model-select" ref={ref}>
+      <button type="button" className="model-trigger" onClick={() => setOpen(!open)}>
+        <span className="model-value">{value || 'модель…'}</span>
+        <span className="caret">▾</span>
+      </button>
+      {open && (
+        <div className="model-menu">
+          <input
+            className="model-search"
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="поиск модели…"
+          />
+          <div className="model-list">
+            {Object.entries(groups).map(([provider, items]) => (
+              <div className="model-group" key={provider}>
+                <div className="model-group-title">{provider}</div>
+                {items.map((m) => (
+                  <button
+                    type="button"
+                    key={`${provider}/${m.id}`}
+                    className={'model-item' + (m.id === value ? ' active' : '')}
+                    onClick={() => {
+                      onChange(m.id);
+                      setOpen(false);
+                      setQuery('');
+                    }}
+                  >
+                    {m.id}
+                  </button>
+                ))}
+              </div>
+            ))}
+            {!filtered.length && <div className="model-empty">ничего не найдено</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [sessions, setSessions] = useState([]);
   const [activeId, setActiveId] = useState('');
@@ -22,6 +96,7 @@ export default function App() {
   const pending = useRef(new Map());
   const activeRef = useRef('');
   const bottomRef = useRef(null);
+  const taRef = useRef(null);
 
   const call = useCallback((cmd, args = {}) => {
     const id = ++seq.current;
@@ -185,6 +260,16 @@ export default function App() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [history, draft]);
 
+  useEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const max = 176;
+    const h = Math.max(56, Math.min(el.scrollHeight, max));
+    el.style.height = `${h}px`;
+    el.style.overflowY = el.scrollHeight > max ? 'auto' : 'hidden';
+  }, [input]);
+
   const send = async () => {
     const text = input.trim();
     if (!text || !activeId) return;
@@ -200,7 +285,13 @@ export default function App() {
 
   const newSession = async () => {
     try {
-      const s = await call('create_session', { workingDir: '/root' });
+      const s = await call('new_session', { workingDir: '/root' });
+      await call('attach', { sessionId: s.session_id });
+      try {
+        await call('clear', { sessionId: s.session_id });
+      } catch (err) {
+        setNotice(` новая сессия создана, очистка истории: ${err.message}`);
+      }
       await refreshSessions();
       await openSession(s.session_id);
     } catch (e) {
@@ -274,32 +365,16 @@ export default function App() {
               ))}
             </select>
           </label>
-          <select
+          <ModelSelect
+            models={models}
             value={currentModel}
-            onChange={(e) => {
-              setCurrentModel(e.target.value);
-              call('set_model', { sessionId: activeId, model: e.target.value }).catch((err) =>
+            onChange={(model) => {
+              setCurrentModel(model);
+              call('set_model', { sessionId: activeId, model }).catch((err) =>
                 setNotice(String(err.message || err)),
               );
             }}
-          >
-            {!currentModel && <option value="">модель…</option>}
-            {Object.entries(
-              models.reduce((acc, m) => {
-                const key = m?.provider || 'jcode';
-                (acc[key] ||= []).push(m);
-                return acc;
-              }, {}),
-            ).map(([provider, items]) => (
-              <optgroup key={provider} label={provider}>
-                {items.map((m) => (
-                  <option key={`${provider}/${m.id}`} value={m.id}>
-                    {m.id}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+          />
           <button
             onClick={() => call('compact', { sessionId: activeId }).catch((e) => setNotice(String(e.message || e)))}
             title="сжать контекст"
@@ -364,6 +439,7 @@ export default function App() {
 
         <div className="composer">
           <textarea
+            ref={taRef}
             value={input}
             placeholder={activeId ? 'сообщение…' : 'сначала выберите сессию'}
             onChange={(e) => setInput(e.target.value)}
