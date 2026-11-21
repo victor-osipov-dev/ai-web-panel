@@ -112,9 +112,23 @@ async function handleCommand(msg) {
       case 'cancel':
         result = await client.cancel(args.sessionId);
         break;
-      case 'models':
-        result = await client.listModels(args.sessionId);
+      case 'models': {
+        const [listed, runtime] = await Promise.all([
+          client.listModels(args.sessionId),
+          client.getRuntimeInfo(args.sessionId),
+        ]);
+        const current = listed?.current || '';
+        const byId = new Map();
+        for (const rt of runtime?.routes || []) {
+          if (!rt?.model || rt.available === false) continue;
+          if (!byId.has(rt.model)) byId.set(rt.model, { id: rt.model, provider: rt.provider || 'jcode' });
+        }
+        for (const id of listed?.models || []) {
+          if (!byId.has(id)) byId.set(id, { id, provider: 'jcode' });
+        }
+        result = { models: [...byId.values()], current };
         break;
+      }
       case 'set_model':
         result = await client.setModel(args.sessionId, args.model);
         break;

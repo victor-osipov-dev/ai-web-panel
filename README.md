@@ -45,6 +45,25 @@ systemctl restart jcode-web
 Запрос `{ id, cmd, args }`, ответ `{ id, ok, result }`, события `{ type: "event", sessionId, event }`.
 Новая фича = новый `case` в `handleCommand` + вызов в `App.jsx`.
 
+## Провайдеры моделей
+
+Все провайдеры описаны в `/root/.jcode/config.toml` (бэкап — `config.toml.bak-before-free`).
+Список в UI строится из `getRuntimeInfo().routes`, поэтому модели сгруппированы по провайдеру.
+
+| Провайдер | Моделей | Ключ | Статус |
+|---|---|---|---|
+| `nanogpt` | 444 | `config/jcode/provider-nanogpt.env` | работает через `api.nano-gpt.com/v1` |
+| `opencode-free` | 83 | нет (keyless) | `429 FreeUsageLimitError` — лимит бесплатного тира |
+| `opencode-go` | 37 | `config/jcode/provider-opencode-go.env` (из старого `pi/auth.json`) + `EnvironmentFile` в юните | `429 GoUsageLimitError`, сброс через ~3 дня; нужен заголовок `x-opencode-session` (прописан) |
+| `llm7` | 2 | нет (keyless) | отвечает на маленькие запросы, но таймаутит на промпте агента ~33 КБ |
+
+`opencode-free` модели берутся из публичного `GET https://opencode.ai/inference/v1/models`
+(фильтр: `type=chat` + tool calling), `opencode-go` — из `GET /zen/go/v1/models` с ключом.
+Чтобы обновить список, измените `config.toml` и перезапустите `jcode-bridge`.
+
+Остальные бесплатные шлюзы из pi-free (cline, fastrouter, agnes, tokenrouter, opengateway)
+сейчас требуют ключ или платёж, поэтому в конфиг не добавлены.
+
 ## VPN
 
 jcode не умеет работать с `socks5://user:pass@…`, поэтому между ним и провайдером стоит

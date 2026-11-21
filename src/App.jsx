@@ -148,7 +148,7 @@ export default function App() {
           if (ev.model) setCurrentModel(ev.model);
           break;
         case 'models':
-          setModels(ev.models || []);
+          setModels((ev.models || []).map((m) => (typeof m === 'string' ? { id: m, provider: 'jcode' } : m)));
           setCurrentModel((c) => ev.current || c);
           break;
         case 'session_status':
@@ -284,10 +284,20 @@ export default function App() {
             }}
           >
             {!currentModel && <option value="">модель…</option>}
-            {models.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
+            {Object.entries(
+              models.reduce((acc, m) => {
+                const key = m?.provider || 'jcode';
+                (acc[key] ||= []).push(m);
+                return acc;
+              }, {}),
+            ).map(([provider, items]) => (
+              <optgroup key={provider} label={provider}>
+                {items.map((m) => (
+                  <option key={`${provider}/${m.id}`} value={m.id}>
+                    {m.id}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
           <button
