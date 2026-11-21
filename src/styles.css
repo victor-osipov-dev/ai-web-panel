@@ -12,7 +12,7 @@ button { background: #232833; border: 1px solid #363d4c; border-radius: 6px; pad
 button:hover { background: #2c3341; }
 button:disabled { opacity: .45; cursor: default; }
 select { background: #1a1e26; border: 1px solid #363d4c; border-radius: 6px; padding: 5px; max-width: 260px; }
-.app { display: flex; height: 100vh; }
+.app { display: flex; height: 100vh; height: 100dvh; }
 .sidebar { width: 250px; flex: none; background: #14171d; border-right: 1px solid #262b35; display: flex; flex-direction: column; padding: 12px; gap: 10px; }
 .brand { font-weight: 700; font-size: 16px; letter-spacing: .3px; }
 .brand span { color: #6f8cff; }
@@ -48,11 +48,12 @@ select { background: #1a1e26; border: 1px solid #363d4c; border-radius: 6px; pad
 .composer textarea:focus { border-color: #6f8cff; }
 .send { align-self: flex-end; height: 40px; }
 .menu, .close-menu { display: none; }
+.menu-label { display: none; }
 .vpn { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #7d8799; white-space: nowrap; }
 .vpn select { max-width: 190px; font-size: 12px; }
 .overlay { display: none; }
 
-@media (max-width: 760px) {
+@media (max-width: 900px), (pointer: coarse) {
   .sidebar {
     position: fixed; z-index: 20; left: 0; top: 0; bottom: 0;
     width: min(86vw, 300px); transform: translateX(-100%);
@@ -61,16 +62,25 @@ select { background: #1a1e26; border: 1px solid #363d4c; border-radius: 6px; pad
   .sidebar.open { transform: none; }
   .overlay.show { display: block; position: fixed; inset: 0; background: #0009; z-index: 15; }
   .menu, .close-menu { display: block; }
-  .close-menu { margin-left: auto; padding: 2px 6px; }
-  .topbar { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
+  .menu-label { display: inline; }
+  .menu { flex: none; min-width: 44px; background: #24304a; border-color: #3d5a96; }
+  .close-menu { margin-left: auto; padding: 4px 8px; min-height: 36px; }
+  .sidebar {
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+  }
+  .topbar {
+    flex-wrap: wrap; gap: 6px; padding: 8px 10px;
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+  }
   .cwd { flex-basis: 100%; order: 3; font-size: 11px; }
-  .vpn { flex: 1; order: 1; }
-  .vpn select { width: 100%; max-width: none; }
-  .topbar > select { flex: 1; order: 2; max-width: 45%; }
-  .topbar button { min-height: 34px; }
+  .vpn-select { flex: 1 1 45%; order: 1; min-width: 0; }
+  .vpn-menu { left: auto; right: 0; width: min(82vw, 300px); }
+  .topbar button { min-height: 40px; }
   .chat { padding: 12px 10px; }
   .msg { padding: 9px 10px; }
-  .composer { padding: 8px 10px 10px; }
+  .composer { padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
   .composer textarea { height: 56px; font-size: 16px; }
   .send { height: 56px; min-width: 84px; }
   .permission .row { flex-wrap: wrap; }
@@ -108,13 +118,45 @@ select { background: #1a1e26; border: 1px solid #363d4c; border-radius: 6px; pad
 .model-empty { padding: 10px; color: #7d8799; font-size: 12px; }
 .composer textarea { transition: height .08s ease; }
 
-@media (max-width: 760px) {
+.vpn-select { position: relative; flex: 0 1 220px; min-width: 140px; }
+.vpn-trigger {
+  width: 100%; display: flex; align-items: center; gap: 6px;
+  background: #1a1e26; border: 1px solid #363d4c; border-radius: 6px; padding: 6px 9px; text-align: left;
+}
+.vpn-trigger:hover { background: #232833; }
+.vpn-value { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: #6d7688; }
+.dot.ok { background: #46c98a; }
+.dot.bad { background: #e2685c; }
+.dot.wait, .dot.unknown { background: #c9a64a; }
+.vpn-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 31;
+  background: #161a21; border: 1px solid #363d4c; border-radius: 8px;
+  box-shadow: 0 14px 36px #000a; padding: 6px; min-width: 250px;
+}
+.vpn-menu-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 4px 8px 8px; color: #7d8799; font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+}
+.vpn-menu-head button { padding: 4px 8px; font-size: 11px; }
+.vpn-list { max-height: min(55vh, 420px); overflow-y: auto; }
+.vpn-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: transparent; border: 0; padding: 7px 8px; border-radius: 5px; color: #c3cad8;
+}
+.vpn-item:hover { background: #242b3a; }
+.vpn-item.active { background: #1e2740; color: #fff; }
+.vpn-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.vpn-item-meta { font-size: 10px; color: #7d8799; white-space: nowrap; }
+
+@media (max-width: 900px), (pointer: coarse) {
   .model-select { order: 2; max-width: none; min-width: 0; flex: 1 1 45%; }
   .model-menu { left: auto; right: 0; width: min(78vw, 320px); }
   .model-list { max-height: 50vh; }
 }
 
 @media (max-width: 420px) {
-  .vpn { flex-basis: 100%; }
+  .vpn-select { flex-basis: 100%; }
   .model-select { max-width: 100%; }
+  .vpn-menu { width: min(92vw, 340px); }
 }

@@ -33,6 +33,20 @@ function readVpnModes() {
   }
 }
 
+async function checkVpnPort(port) {
+  try {
+    const res = await fetch('http://127.0.0.1:8118/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port }),
+      signal: AbortSignal.timeout(12000),
+    });
+    return await res.json();
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
 const client = await JcodeClient.connect({ clientName: 'jcode-web/0.1' });
 const sockets = new Set();
 const attached = new Set();
@@ -73,6 +87,11 @@ async function handleCommand(msg) {
         break;
       case 'vpn_modes':
         result = { modes: readVpnModes(), current: readVpnPort() };
+        break;
+      case 'vpn_check':
+        result = await Promise.all(
+          readVpnModes().map(async (m) => ({ port: m.port, name: m.name, ...(await checkVpnPort(m.port)) })),
+        );
         break;
       case 'vpn_set': {
         const port = Number(args.port);

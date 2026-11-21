@@ -2,6 +2,76 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 const emptyDraft = () => ({ text: '', reasoning: '', tools: [], usage: null });
 
+function statusDot(result, checking) {
+  if (checking) return 'wait';
+  if (!result) return 'unknown';
+  return result.ok ? 'ok' : 'bad';
+}
+
+function VpnSelect({ modes, value, status, checking, onChange, onRefresh }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const current = (modes || []).find((m) => m.port === value);
+  return (
+    <div className="vpn-select" ref={ref}>
+      <button type="button" className="vpn-trigger" onClick={() => setOpen(!open)}>
+        <span className={'dot ' + statusDot(status?.[value], checking)} />
+        <span className="vpn-value">{current?.name || 'VPN'}</span>
+        <span className="caret">▾</span>
+      </button>
+      {open && (
+        <div className="vpn-menu">
+          <div className="vpn-menu-head">
+            <span>подключения</span>
+            <button type="button" onClick={onRefresh} disabled={checking}>
+              {checking ? 'проверяю…' : 'проверить'}
+            </button>
+          </div>
+          <div className="vpn-list">
+            {(modes || []).map((m) => {
+              const s = status?.[m.port];
+              return (
+                <button
+                  type="button"
+                  key={m.port}
+                  className={'vpn-item' + (m.port === value ? ' active' : '')}
+                  onClick={() => {
+                    onChange(m.port);
+                    setOpen(false);
+                  }}
+                >
+                  <span className={'dot ' + statusDot(s, checking)} />
+                  <span className="vpn-item-name">{m.name}</span>
+                  <span className="vpn-item-meta">
+                    {checking ? '…' : s ? (s.ok ? `${s.ms} мс` : 'нет связи') : '—'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ModelSelect({ models, value, onChange }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -89,6 +159,8 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [vpnModes, setVpnModes] = useState([]);
   const [vpnPort, setVpnPort] = useState(0);
+  const [vpnStatus, setVpnStatus] = useState({});
+  const [vpnChecking, setVpnChecking] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const wsRef = useRef(null);
@@ -114,6 +186,33 @@ export default function App() {
       setNotice(String(e.message || e));
     }
   }, [call]);
+
+  const runVpnCheck = useCallback(async () => {
+    setVpnChecking(true);
+    try {
+      const list = await call('vpn_check');
+      const map = {};
+      for (const item of list || []) map[item.port] = item;
+      setVpnStatus(map);
+    } catch (e) {
+      setNotice(String(e.message || e));
+    } finally {
+      setVpnChecking(false);
+    }
+  }, [call]);
+
+  const changeVpn = useCallback(
+    async (port) => {
+      setVpnPort(port);
+      try {
+        await call('vpn_set', { port });
+        setNotice(`VPN: ${vpnModes.find((m) => m.port === port)?.name || port}`);
+      } catch (e) {
+        setNotice(String(e.message || e));
+      }
+    },
+    [call, vpnModes],
+  );
 
   const openSession = useCallback(
     async (id) => {
@@ -149,6 +248,7 @@ export default function App() {
         .then((r) => {
           setVpnModes(r?.modes || []);
           setVpnPort(r?.current || 0);
+          runVpnCheck();
         })
         .catch(() => {});
     };
@@ -343,28 +443,18 @@ export default function App() {
 
       <main className="main">
         <header className="topbar">
-          <button className="menu" onClick={() => setMenuOpen(!menuOpen)} title="сессии">☰</button>
+          <button className="menu" onClick={() => setMenuOpen(!menuOpen)} title="сессии">
+            ☰ <span className="menu-label">сессии</span>
+          </button>
           <span className="cwd">{activeId || 'выберите сессию'}</span>
-          <label className="vpn">
-            <span>VPN</span>
-            <select
-              value={vpnPort}
-              onChange={async (e) => {
-                const port = Number(e.target.value);
-                setVpnPort(port);
-                try {
-                  await call('vpn_set', { port });
-                  setNotice(`VPN: ${vpnModes.find((m) => m.port === port)?.name || port}`);
-                } catch (err) {
-                  setNotice(String(err.message || err));
-                }
-              }}
-            >
-              {vpnModes.map((m) => (
-                <option key={m.port} value={m.port}>{m.name}</option>
-              ))}
-            </select>
-          </label>
+          <VpnSelect
+            modes={vpnModes}
+            value={vpnPort}
+            status={vpnStatus}
+            checking={vpnChecking}
+            onChange={changeVpn}
+            onRefresh={runVpnCheck}
+          />
           <ModelSelect
             models={models}
             value={currentModel}

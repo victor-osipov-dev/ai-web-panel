@@ -1,5 +1,6 @@
 import net from 'node:net';
 import http from 'node:http';
+import tls from 'node:tls';
 import fs from 'node:fs';
 
 const PORT = Number(process.env.PROXY_PORT || 8118);
@@ -76,7 +77,73 @@ function socks5(host, port, upstreamPort) {
   });
 }
 
-const server = http.createServer((req, res) => {
+function directConnect(host, port) {
+  return new Promise((resolve, reject) => {
+    const s = net.connect(port, host, () => resolve(s));
+    s.on('error', reject);
+  });
+}
+
+async function checkUpstream(port, host = 'api.nano-gpt.com') {
+  const started = Date.now();
+  let socket;
+  let secure;
+  try {
+    socket = port > 0 ? await socks5(host, 443, port) : await directConnect(host, 443);
+    socket.setTimeout(8000, () => socket.destroy(new Error('connect timeout')));
+    secure = await new Promise((resolve, reject) => {
+      const t = tls.connect({ socket, servername: host }, () => resolve(t));
+      t.on('error', reject);
+    });
+    const status = await new Promise((resolve, reject) => {
+      let buf = '';
+      const timer = setTimeout(() => reject(new Error('no HTTP response')), 6000);
+      const onData = (chunk) => {
+        buf += chunk.toString();
+        const i = buf.indexOf('\r\n');
+        if (i > 0) {
+          clearTimeout(timer);
+          resolve(buf.slice(0, i));
+        }
+      };
+      secure.on('data', onData);
+      secure.on('error', reject);
+      secure.write(`HEAD /v1/models HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`);
+    });
+    return { ok: true, ms: Date.now() - started, status };
+  } catch (e) {
+    return { ok: false, ms: Date.now() - started, error: String(e?.message || e) };
+  } finally {
+    try { secure?.destroy(); } catch { /* ignore */ }
+    try { socket?.destroy(); } catch { /* ignore */ }
+  }
+}
+
+function readJson(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      try { resolve(JSON.parse(body || '{}')); } catch (e) { reject(e); }
+    });
+    req.on('error', reject);
+  });
+}
+
+const server = http.createServer(async (req, res) => {
+  if (req.method === 'POST' && (req.url || '').split('?')[0] === '/check') {
+    try {
+      const body = await readJson(req);
+      const port = Number(body.port || 0);
+      const result = await checkUpstream(port, body.host || 'api.nano-gpt.com');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (e) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: String(e) }));
+    }
+    return;
+  }
   res.writeHead(405).end('CONNECT only');
 });
 
@@ -88,12 +155,9 @@ server.on('connect', async (req, client, head) => {
   try {
     remote = upstream
       ? await socks5(host, port, upstream)
-      : await new Promise((resolve, reject) => {
-          const s = net.connect(port, host, () => resolve(s));
-          s.on('error', reject);
-        });
-  } catch (e) {
-    client.end(`HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n`);
+      : await directConnect(host, port);
+  } catch {
+    client.end('HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n');
     return;
   }
   client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
