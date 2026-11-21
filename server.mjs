@@ -110,29 +110,13 @@ async function handleCommand(msg) {
         const cwd = args.workingDir || DEFAULT_CWD;
         let s;
         if (cmd === 'new_session') {
-          // jcode's create_session reuses the last session for the same cwd.
-          // Fork + clear gives a genuinely fresh, empty session instead.
-          const list = await client.listSessions();
-          const candidates = [
-            ...list.filter((x) => x.working_dir === cwd && x.status === 'idle' && !x.archived),
-            ...list.filter((x) => x.working_dir === cwd && !x.archived),
-            ...list.filter((x) => !x.archived),
-          ];
-          for (const source of candidates) {
-            try {
-              await client.attachSession(source.session_id);
-              const forked = await client.forkSession(source.session_id);
-              const id = forked.session_id || forked.session?.session_id;
-              if (!id) continue;
-              await client.attachSession(id);
-              s = forked.session || forked;
-              break;
-            } catch {
-              // Busy or stale source — try the next one.
-            }
-          }
+          // Without an explicit system prompt jcode reuses the last session
+          // for the same cwd. An empty prompt forces a brand-new empty session
+          // while leaving the agent's default system prompt intact.
+          s = await client.createSession({ workingDir: cwd, systemPrompt: '' });
+        } else {
+          s = await client.createSession(cwd);
         }
-        if (!s) s = await client.createSession(cwd);
         watchSession(s.session_id);
         result = s;
         broadcast({ type: 'sessions', sessions: await client.listSessions() });

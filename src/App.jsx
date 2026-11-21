@@ -401,11 +401,6 @@ export default function App() {
       setDraft(emptyDraft());
       stickRef.current = true;
       await call('attach', { sessionId: id });
-      try {
-        await call('clear', { sessionId: id });
-      } catch (err) {
-        setNotice(`сессия создана, но очистка истории: ${err.message}`);
-      }
       await refreshSessions();
       await openSession(id);
       setNotice(`новая сессия: ${id}`);
