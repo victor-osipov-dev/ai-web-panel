@@ -167,7 +167,8 @@ export default function App() {
   const seq = useRef(0);
   const pending = useRef(new Map());
   const activeRef = useRef('');
-  const bottomRef = useRef(null);
+  const chatRef = useRef(null);
+  const stickRef = useRef(true);
   const taRef = useRef(null);
 
   const call = useCallback((cmd, args = {}) => {
@@ -223,6 +224,7 @@ export default function App() {
       setDraft(emptyDraft());
       setHistory([]);
       setPermission(null);
+      stickRef.current = true;
       try {
         await call('attach', { sessionId: id });
         const h = await call('history', { sessionId: id });
@@ -357,7 +359,9 @@ export default function App() {
   }, [refreshSessions]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = chatRef.current;
+    if (!el || !stickRef.current) return;
+    el.scrollTop = el.scrollHeight;
   }, [history, draft]);
 
   useEffect(() => {
@@ -476,7 +480,14 @@ export default function App() {
           </button>
         </header>
 
-        <div className="chat">
+        <div
+          className="chat"
+          ref={chatRef}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+          }}
+        >
           {history.map((m, i) => (
             <div key={i} className={`msg ${m.role}`}>
               <div className="role">{m.role === 'user' ? 'вы' : m.role === 'assistant' ? 'агент' : m.role}</div>
@@ -524,7 +535,7 @@ export default function App() {
               </div>
             </div>
           )}
-          <div ref={bottomRef} />
+
         </div>
 
         <div className="composer">
