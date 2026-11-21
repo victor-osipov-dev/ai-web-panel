@@ -9,6 +9,29 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(__dirname, 'dist');
 const PORT = Number(process.env.PORT || 8193);
 const DEFAULT_CWD = process.env.JCODE_WEB_CWD || '/root';
+const VPN_MODES_FILE = '/etc/vpn-modes.json';
+const VPN_STATE_FILE = process.env.VPN_STATE_FILE || '/root/.jcode/vpn-port';
+
+function readVpnPort() {
+  try {
+    const p = Number(fs.readFileSync(VPN_STATE_FILE, 'utf8').trim());
+    return Number.isInteger(p) && p > 0 ? p : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function readVpnModes() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(VPN_MODES_FILE, 'utf8'));
+    return [
+      { port: 0, name: 'Прямо (без VPN)' },
+      ...Object.entries(raw).map(([name, v]) => ({ port: Number(v.port), name })),
+    ].filter((m) => Number.isInteger(m.port));
+  } catch {
+    return [{ port: 0, name: 'Прямо (без VPN)' }];
+  }
+}
 
 const client = await JcodeClient.connect({ clientName: 'jcode-web/0.1' });
 const sockets = new Set();
@@ -48,6 +71,18 @@ async function handleCommand(msg) {
       case 'ping':
         result = { ok: true };
         break;
+      case 'vpn_modes':
+        result = { modes: readVpnModes(), current: readVpnPort() };
+        break;
+      case 'vpn_set': {
+        const port = Number(args.port);
+        if (!Number.isInteger(port) || port < 0) throw new Error('invalid vpn port');
+        if (port !== 0 && !readVpnModes().some((m) => m.port === port)) throw new Error('unknown vpn mode');
+        fs.writeFileSync(VPN_STATE_FILE, String(port));
+        result = { port };
+        broadcast({ type: 'vpn', port });
+        break;
+      }
       case 'list_sessions':
         result = await client.listSessions({ includeArchived: false });
         break;

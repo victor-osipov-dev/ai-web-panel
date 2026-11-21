@@ -24,7 +24,8 @@
 | jcode (бинарник v1.0.1) | `/opt/jcode/jcode` → `/usr/local/bin/jcode` |
 | Состояние и конфиг jcode | `/root/.jcode` |
 | Провайдер NanoGPT | `/root/.jcode/config.toml`, ключ в `config/jcode/provider-nanogpt.env` |
-| systemd | `jcode-bridge.service`, `jcode-web.service` |
+| systemd | `jcode-proxy.service`, `jcode-bridge.service`, `jcode-web.service` |
+| VPN | `/etc/vpn-modes.json` (список), `/root/.jcode/vpn-port` (выбранный порт, `0` = прямо) |
 | nginx | `/etc/nginx/sites-enabled/code-fimdi.conf` → `127.0.0.1:8193` |
 
 ## Разработка
@@ -43,6 +44,23 @@ systemctl restart jcode-web
 Протокол браузер↔мост: JSON по WebSocket `/ws`.
 Запрос `{ id, cmd, args }`, ответ `{ id, ok, result }`, события `{ type: "event", sessionId, event }`.
 Новая фича = новый `case` в `handleCommand` + вызов в `App.jsx`.
+
+## VPN
+
+jcode не умеет работать с `socks5://user:pass@…`, поэтому между ним и провайдером стоит
+локальный CONNECT-прокси `proxy.mjs` (`127.0.0.1:8118`). Он читает выбранный порт из
+`/root/.jcode/vpn-port` и для каждого соединения либо идёт напрямую (`0`), либо через
+соответствующий socks5-инбаунд xray (`user:12345`).
+
+В UI список режимов берётся из `/etc/vpn-modes.json`, выбор сохраняется командой `vpn_set`.
+Переключение не требует рестарта сервисов — следующий запрос уже пойдёт через новый канал.
+Проверено: `0` (прямо) и `1082` работают; `1081` (Германия) в данный момент не проходит
+для `api.nano-gpt.com` (SSL error) — это проблемой UI не является.
+
+## Телефон
+
+Сайт адаптивен: сайдбар превращается в выдвижное меню по кнопке ☰, элементы управления
+крупнее, поле ввода не масштабируется (font-size 16px). Выбор VPN доступен в шапке.
 
 ## Эксплуатация
 

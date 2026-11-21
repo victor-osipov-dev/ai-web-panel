@@ -13,6 +13,9 @@ export default function App() {
   const [permission, setPermission] = useState(null);
   const [status, setStatus] = useState('');
   const [notice, setNotice] = useState('');
+  const [vpnModes, setVpnModes] = useState([]);
+  const [vpnPort, setVpnPort] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const wsRef = useRef(null);
   const seq = useRef(0);
@@ -42,6 +45,7 @@ export default function App() {
       if (!id) return;
       activeRef.current = id;
       setActiveId(id);
+      setMenuOpen(false);
       setDraft(emptyDraft());
       setHistory([]);
       setPermission(null);
@@ -64,7 +68,15 @@ export default function App() {
     const ws = new WebSocket(`${proto}//${location.host}/ws`);
     wsRef.current = ws;
 
-    ws.onopen = () => refreshSessions();
+    ws.onopen = () => {
+      refreshSessions();
+      call('vpn_modes')
+        .then((r) => {
+          setVpnModes(r?.modes || []);
+          setVpnPort(r?.current || 0);
+        })
+        .catch(() => {});
+    };
     ws.onclose = () => setNotice('connection lost — reload the page');
     ws.onerror = () => setNotice('websocket error');
 
@@ -88,6 +100,10 @@ export default function App() {
       }
       if (msg.type === 'notice') {
         setNotice(msg.text);
+        return;
+      }
+      if (msg.type === 'vpn') {
+        setVpnPort(msg.port);
         return;
       }
       if (msg.type !== 'event') return;
@@ -208,8 +224,12 @@ export default function App() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
-        <div className="brand">jcode<span>·web</span></div>
+      <div className={'overlay' + (menuOpen ? ' show' : '')} onClick={() => setMenuOpen(false)} />
+      <aside className={'sidebar' + (menuOpen ? ' open' : '')}>
+        <div className="brand">
+          jcode<span>·web</span>
+          <button className="close-menu" onClick={() => setMenuOpen(false)}>✕</button>
+        </div>
         <button className="new" onClick={newSession}>+ новая сессия</button>
         <div className="sessions">
           {sessions.map((s) => (
@@ -232,7 +252,28 @@ export default function App() {
 
       <main className="main">
         <header className="topbar">
+          <button className="menu" onClick={() => setMenuOpen(!menuOpen)} title="сессии">☰</button>
           <span className="cwd">{activeId || 'выберите сессию'}</span>
+          <label className="vpn">
+            <span>VPN</span>
+            <select
+              value={vpnPort}
+              onChange={async (e) => {
+                const port = Number(e.target.value);
+                setVpnPort(port);
+                try {
+                  await call('vpn_set', { port });
+                  setNotice(`VPN: ${vpnModes.find((m) => m.port === port)?.name || port}`);
+                } catch (err) {
+                  setNotice(String(err.message || err));
+                }
+              }}
+            >
+              {vpnModes.map((m) => (
+                <option key={m.port} value={m.port}>{m.name}</option>
+              ))}
+            </select>
+          </label>
           <select
             value={currentModel}
             onChange={(e) => {
