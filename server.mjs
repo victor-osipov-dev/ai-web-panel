@@ -113,15 +113,23 @@ async function handleCommand(msg) {
           // jcode's create_session reuses the last session for the same cwd.
           // Fork + clear gives a genuinely fresh, empty session instead.
           const list = await client.listSessions();
-          const source = list.find((x) => x.working_dir === cwd) || list[0];
-          if (source) {
-            await client.attachSession(source.session_id);
-            const forked = await client.forkSession(source.session_id);
-            const id = forked.session_id || forked.session?.session_id;
-            // The fork copies its parent's history; the client clears it right
-            // after attaching (see App.jsx) to avoid "session busy" races here.
-            await client.attachSession(id);
-            s = forked.session || forked;
+          const candidates = [
+            ...list.filter((x) => x.working_dir === cwd && x.status === 'idle' && !x.archived),
+            ...list.filter((x) => x.working_dir === cwd && !x.archived),
+            ...list.filter((x) => !x.archived),
+          ];
+          for (const source of candidates) {
+            try {
+              await client.attachSession(source.session_id);
+              const forked = await client.forkSession(source.session_id);
+              const id = forked.session_id || forked.session?.session_id;
+              if (!id) continue;
+              await client.attachSession(id);
+              s = forked.session || forked;
+              break;
+            } catch {
+              // Busy or stale source — try the next one.
+            }
           }
         }
         if (!s) s = await client.createSession(cwd);
@@ -221,7 +229,11 @@ const server = http.createServer((req, res) => {
     res.writeHead(404).end('not built');
     return;
   }
-  res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+  const isIndex = path.basename(file) === 'index.html';
+  res.writeHead(200, {
+    'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
+    ...(isIndex ? { 'Cache-Control': 'no-store' } : {}),
+  });
   fs.createReadStream(file).pipe(res);
 });
 

@@ -389,17 +389,28 @@ export default function App() {
 
   const newSession = async () => {
     try {
+      setNotice('создаю сессию…');
       const s = await call('new_session', { workingDir: '/root' });
-      await call('attach', { sessionId: s.session_id });
+      const id = s?.session_id || s?.session?.session_id;
+      if (!id) throw new Error('сервер не вернул id новой сессии');
+      // Switch immediately, before any optional cleanup step can fail.
+      activeRef.current = id;
+      setActiveId(id);
+      setMenuOpen(false);
+      setHistory([]);
+      setDraft(emptyDraft());
+      stickRef.current = true;
+      await call('attach', { sessionId: id });
       try {
-        await call('clear', { sessionId: s.session_id });
+        await call('clear', { sessionId: id });
       } catch (err) {
-        setNotice(` новая сессия создана, очистка истории: ${err.message}`);
+        setNotice(`сессия создана, но очистка истории: ${err.message}`);
       }
       await refreshSessions();
-      await openSession(s.session_id);
+      await openSession(id);
+      setNotice(`новая сессия: ${id}`);
     } catch (e) {
-      setNotice(String(e.message || e));
+      setNotice(`не удалось создать сессию: ${e.message || e}`);
     }
   };
 
