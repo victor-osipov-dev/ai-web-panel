@@ -162,6 +162,8 @@ export default function App() {
   const [vpnStatus, setVpnStatus] = useState({});
   const [vpnChecking, setVpnChecking] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [editingId, setEditingId] = useState('');
+  const [editTitle, setEditTitle] = useState('');
 
   const wsRef = useRef(null);
   const seq = useRef(0);
@@ -421,6 +423,36 @@ export default function App() {
     }
   };
 
+  const saveEdit = async () => {
+    if (!editingId) return;
+    const title = editTitle.trim();
+    try {
+      await call('rename', { sessionId: editingId, title: title || undefined });
+      await refreshSessions();
+    } catch (e) {
+      setNotice(String(e.message || e));
+    } finally {
+      setEditingId('');
+      setEditTitle('');
+    }
+  };
+
+  const removeSession = async (s) => {
+    if (!window.confirm(`Удалить сессию «${s.title || s.session_id}»?`)) return;
+    try {
+      await call('delete', { sessionId: s.session_id });
+      if (activeRef.current === s.session_id) {
+        activeRef.current = '';
+        setActiveId('');
+        setHistory([]);
+        setDraft(emptyDraft());
+      }
+      await refreshSessions();
+    } catch (e) {
+      setNotice(String(e.message || e));
+    }
+  };
+
   const decide = async (decision) => {
     if (!permission || !activeId) return;
     try {
@@ -445,17 +477,54 @@ export default function App() {
         </div>
         <button className="new" onClick={newSession}>+ новая сессия</button>
         <div className="sessions">
-          {sessions.map((s) => (
-            <button
-              key={s.session_id}
-              className={'session' + (s.session_id === activeId ? ' active' : '')}
-              onClick={() => openSession(s.session_id)}
-              title={s.working_dir || ''}
-            >
-              <span className="dot" />
-              <span className="title">{s.title || s.session_id.replace('session_', '').slice(0, 18)}</span>
-            </button>
-          ))}
+          {sessions.map((s) => {
+            const label = s.title || s.session_id.replace('session_', '').slice(0, 18);
+            if (editingId === s.session_id) {
+              return (
+                <div className="session-row editing" key={s.session_id}>
+                  <input
+                    autoFocus
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onBlur={saveEdit}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveEdit();
+                      if (e.key === 'Escape') {
+                        setEditingId('');
+                        setEditTitle('');
+                      }
+                    }}
+                  />
+                  <button className="icon" onClick={saveEdit} title="сохранить">✓</button>
+                </div>
+              );
+            }
+            return (
+              <div className={'session-row' + (s.session_id === activeId ? ' active' : '')} key={s.session_id}>
+                <button
+                  className="session-open"
+                  onClick={() => openSession(s.session_id)}
+                  title={s.working_dir || s.session_id}
+                >
+                  <span className="dot" />
+                  <span className="title">{label}</span>
+                </button>
+                <button
+                  className="icon"
+                  title="переименовать"
+                  onClick={() => {
+                    setEditingId(s.session_id);
+                    setEditTitle(s.title || '');
+                  }}
+                >
+                  ✎
+                </button>
+                <button className="icon danger" title="удалить" onClick={() => removeSession(s)}>
+                  ✕
+                </button>
+              </div>
+            );
+          })}
         </div>
         <div className="foot">
           {status && <div className="status">{status}</div>}

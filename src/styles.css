@@ -22,11 +22,27 @@ select { background: #1a1e26; border: 1px solid #363d4c; border-radius: 6px; pad
 .brand span { color: #6f8cff; }
 .new { text-align: left; }
 .sessions { display: flex; flex-direction: column; gap: 2px; overflow: auto; flex: 1; }
-.session { display: flex; align-items: center; gap: 8px; text-align: left; background: transparent; border: 0; padding: 7px 8px; border-radius: 6px; color: #aeb6c6; }
-.session.active { background: #242b3a; color: #fff; }
-.session .dot { width: 6px; height: 6px; border-radius: 50%; background: #4c5a72; flex: none; }
-.session.active .dot { background: #6f8cff; }
-.session .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-row { display: flex; align-items: center; gap: 2px; border-radius: 6px; }
+.session-row.active { background: #242b3a; }
+.session-open {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; text-align: left;
+  background: transparent; border: 0; padding: 7px 8px; border-radius: 6px; color: #aeb6c6;
+}
+.session-open:hover { background: transparent; }
+.session-row.active .session-open { color: #fff; }
+.session-row .dot { width: 6px; height: 6px; border-radius: 50%; background: #4c5a72; flex: none; }
+.session-row.active .dot { background: #6f8cff; }
+.session-row .title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-row .icon {
+  background: transparent; border: 0; padding: 4px 6px; min-width: 26px;
+  color: #8b94a5; font-size: 12px;
+}
+.session-row .icon:hover { background: #2c3341; color: #fff; }
+.session-row .icon.danger:hover { color: #ff9d90; }
+.session-row.editing input {
+  flex: 1; min-width: 0; background: #10131a; border: 1px solid #6f8cff;
+  border-radius: 5px; padding: 5px 7px;
+}
 .foot { font-size: 11px; color: #8b94a5; }
 .status, .notice { padding: 5px 7px; background: #1b2029; border-radius: 5px; margin-top: 5px; word-break: break-word; }
 .notice { color: #ffb4a8; }

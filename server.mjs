@@ -10,6 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(__dirname, 'dist');
 const PORT = Number(process.env.PORT || 8193);
 const DEFAULT_CWD = process.env.JCODE_WEB_CWD || '/root';
+const SESSIONS_DIR = process.env.JCODE_SESSIONS_DIR || '/root/.jcode/sessions';
 const VPN_MODES_FILE = '/etc/vpn-modes.json';
 const VPN_STATE_FILE = process.env.VPN_STATE_FILE || '/root/.jcode/vpn-port';
 
@@ -187,6 +188,25 @@ async function handleCommand(msg) {
         result = await client.renameSession(args.sessionId, args.title);
         broadcast({ type: 'sessions', sessions: await client.listSessions() });
         break;
+      case 'delete': {
+        const id = args.sessionId;
+        if (!/^session_[A-Za-z0-9_]+$/.test(String(id))) throw new Error('invalid session id');
+        try { await client.detachSession(id); } catch { /* not attached */ }
+        try { await client.archiveSession(id); } catch { /* already archived */ }
+        let removed = 0;
+        try {
+          for (const name of fs.readdirSync(SESSIONS_DIR)) {
+            if (name === id || name.startsWith(`${id}.`)) {
+              fs.rmSync(path.join(SESSIONS_DIR, name), { force: true });
+              removed++;
+            }
+          }
+        } catch { /* directory may be missing */ }
+        attached.delete(id);
+        result = { ok: true, removed };
+        broadcast({ type: 'sessions', sessions: await client.listSessions() });
+        break;
+      }
       case 'rewind':
         result = await client.rewind(args.sessionId, args.index);
         break;
